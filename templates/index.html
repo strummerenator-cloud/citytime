@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brian's Time Machine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #252836;
+      --border: #2e3147;
+      --accent: #6c8eff;
+      --accent-dim: #3a4d99;
+      --text: #e2e4f0;
+      --text-dim: #8b8fa8;
+      --danger: #ff6b6b;
+      --success: #6bffb8;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    header {
+      max-width: 960px;
+      margin: 0 auto 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .logo { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--accent); }
+
+    /* ── Search ──────────────────────────────────────────── */
+    .search-wrap {
+      max-width: 960px;
+      margin: 0 auto 32px;
+      position: relative;
+    }
+    .search-input {
+      width: 100%;
+      padding: 14px 48px 14px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-dim); }
+    .search-icon {
+      position: absolute;
+      right: 16px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      pointer-events: none;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      z-index: 100;
+      overflow: hidden;
+      display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .dropdown.open { display: block; }
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      cursor: pointer;
+      gap: 12px;
+      transition: background 0.15s;
+    }
+    .dropdown-item:hover { background: var(--surface2); }
+    .dropdown-item .city-name { font-weight: 600; }
+    .dropdown-item .tz-name { font-size: 0.8rem; color: var(--text-dim); }
+    .dropdown-item .item-time { font-family: monospace; font-size: 0.95rem; color: var(--accent); white-space: nowrap; }
+    .dropdown-item .pin-btn {
+      background: var(--accent-dim);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .dropdown-item .pin-btn:hover { background: var(--accent); }
+    .dropdown-empty { padding: 16px; color: var(--text-dim); text-align: center; }
+
+    /* ── Section wrapper ─────────────────────────────────── */
+    .section {
+      max-width: 960px;
+      margin: 0 auto 36px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+    }
+
+    /* ── City cards ──────────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .city-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      position: relative;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .city-card:hover { border-color: var(--accent-dim); transform: translateY(-2px); }
+    .city-card .card-city { font-weight: 700; font-size: 1rem; margin-bottom: 8px; }
+    .city-card .card-time {
+      font-family: 'Courier New', monospace;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .city-card .card-date { font-size: 0.8rem; color: var(--text-dim); }
+    .city-card .card-tz { font-size: 0.75rem; color: var(--text-dim); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .city-card .card-remove {
+      position: absolute;
+      top: 10px; right: 10px;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .city-card .card-remove:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+    .empty-cards {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      padding: 20px 0;
+    }
+
+    /* ── Alias table ─────────────────────────────────────── */
+    .alias-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .alias-table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+    }
+    .alias-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .alias-table tr:last-child td { border-bottom: none; }
+    .alias-table tr:hover td { background: var(--surface2); }
+    .alias-table .tz-cell { color: var(--text-dim); font-size: 0.85rem; }
+    .alias-table .del-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 3px 7px;
+      border-radius: 4px;
+    }
+    .alias-table .del-btn:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+    .alias-table .pin-cell button {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.95rem;
+      padding: 3px 6px;
+      border-radius: 4px;
+    }
+    .alias-table .pin-cell button:hover { color: var(--accent); }
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    /* ── Add alias modal ─────────────────────────────────── */
+    .btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: var(--accent-dim); color: #fff; }
+    .btn-primary:hover { background: var(--accent); }
+    .btn-ghost { background: var(--surface2); color: var(--text); }
+    .btn-ghost:hover { background: var(--border); }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+      max-width: 420px;
+    }
+    .modal h2 { font-size: 1.1rem; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .form-error { font-size: 0.82rem; color: var(--danger); margin-top: 8px; display: none; }
+    .form-error.show { display: block; }
+
+    /* ── Toast ───────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 18px;
+      font-size: 0.9rem;
+      z-index: 999;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { border-color: var(--success); color: var(--success); }
+    #toast.error { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Steampunk Clock ─────────────────────────────────── */
+    .steampunk-clock-wrap {
+      width: 120px;
+      height: 120px;
+      flex-shrink: 0;
+      animation: spPulse 3s ease-in-out infinite;
+    }
+    @keyframes spPulse {
+      0%, 100% { filter: drop-shadow(0 0 5px rgba(86,195,228,0.35)); }
+      50%       { filter: drop-shadow(0 0 14px rgba(86,195,228,0.7)); }
+    }
+    #steampunk-clock { width: 100%; height: 100%; display: block; }
+
+    /* ── Headlines panel ─────────────────────────────────── */
+    .headlines-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      min-width: 240px;
+      max-width: 300px;
+      flex-shrink: 1;
+    }
+    .headlines-panel-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 5px;
+    }
+    .headlines-list {
+      list-style: none;
+    }
+    .headlines-list li {
+      border-top: 1px solid var(--border);
+      padding: 3px 0;
+    }
+    .headlines-list li:first-child { border-top: none; }
+    .headlines-list a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.75rem;
+      line-height: 1.35;
+      display: block;
+    }
+    .headlines-list a:hover { color: var(--accent); }
+    .headlines-loading { font-size: 0.75rem; color: var(--text-dim); }
+    #sp-gear-outer {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: spGearSpin 20s linear infinite;
+    }
+    @keyframes spGearSpin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">&#128336; Brian's <span>Time Machine</span></div>
+
+  <!-- Today's Headlines -->
+  <div class="headlines-panel">
+    <div class="headlines-panel-title">&#128240; Today's Headlines</div>
+    <ul class="headlines-list" id="headlinesList">
+      <li><span class="headlines-loading">Loading...</span></li>
+    </ul>
+  </div>
+
+  <!-- Steampunk Clock -->
+  <div class="steampunk-clock-wrap" title="Local time">
+    <svg id="steampunk-clock" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="spGear" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#1a5276"/>
+          <stop offset="100%" stop-color="#0a1a2a"/>
+        </radialGradient>
+        <radialGradient id="spFace" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#081828"/>
+          <stop offset="100%" stop-color="#020810"/>
+        </radialGradient>
+        <filter id="spGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="1.3" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Spinning outer gear (body + teeth) -->
+      <g id="sp-gear-outer">
+      <circle cx="60" cy="60" r="56" fill="url(#spGear)" stroke="#061525" stroke-width="1.5"/>
+
+      <!-- 18 gear teeth (20° apart) -->
+      <g fill="#56c3e4" stroke="#061525" stroke-width="0.5">
+        <g transform="rotate(0 60 60)">  <rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(20 60 60)"> <rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(40 60 60)"> <rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(60 60 60)"> <rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(80 60 60)"> <rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(100 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(120 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(140 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(160 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(180 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(200 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(220 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(240 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(260 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(280 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(300 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(320 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+        <g transform="rotate(340 60 60)"><rect x="57.5" y="1" width="5" height="8" rx="1.5"/></g>
+      </g>
+      </g><!-- end sp-gear-outer -->
+
+      <!-- Bezel ring -->
+      <circle cx="60" cy="60" r="47" fill="#0c1e2e" stroke="#56c3e4" stroke-width="2.5"/>
+
+      <!-- Rivets at cardinal points (on bezel at r=47) -->
+      <circle cx="60"  cy="13"  r="3" fill="#90d8f0" stroke="#061525" stroke-width="0.8"/>
+      <circle cx="107" cy="60"  r="3" fill="#90d8f0" stroke="#061525" stroke-width="0.8"/>
+      <circle cx="60"  cy="107" r="3" fill="#90d8f0" stroke="#061525" stroke-width="0.8"/>
+      <circle cx="13"  cy="60"  r="3" fill="#90d8f0" stroke="#061525" stroke-width="0.8"/>
+
+      <!-- Clock face -->
+      <circle cx="60" cy="60" r="44" fill="url(#spFace)"/>
+      <!-- Face border + inner dashed ring -->
+      <circle cx="60" cy="60" r="43.5" fill="none" stroke="#122e44" stroke-width="1"/>
+      <circle cx="60" cy="60" r="38"   fill="none" stroke="#0a1a2a" stroke-width="0.6" stroke-dasharray="2.5 2.5"/>
+
+      <!-- Tick marks -->
+      <g stroke="#56c3e4" stroke-linecap="round">
+        <!-- Major ticks at 12, 3, 6, 9 -->
+        <g transform="rotate(0 60 60)">  <line x1="60" y1="18" x2="60" y2="25" stroke-width="2.2"/></g>
+        <g transform="rotate(90 60 60)"> <line x1="60" y1="18" x2="60" y2="25" stroke-width="2.2"/></g>
+        <g transform="rotate(180 60 60)"><line x1="60" y1="18" x2="60" y2="25" stroke-width="2.2"/></g>
+        <g transform="rotate(270 60 60)"><line x1="60" y1="18" x2="60" y2="25" stroke-width="2.2"/></g>
+        <!-- Minor ticks at other hour positions -->
+        <g transform="rotate(30 60 60)"> <line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(60 60 60)"> <line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(120 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(150 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(210 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(240 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(300 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+        <g transform="rotate(330 60 60)"><line x1="60" y1="20" x2="60" y2="25" stroke-width="1.2"/></g>
+      </g>
+
+      <!-- Roman numerals -->
+      <g font-family="'Georgia','Times New Roman',serif" font-size="7.5" fill="#56c3e4" text-anchor="middle">
+        <text x="60"  y="33"  dominant-baseline="central">XII</text>
+        <text x="89"  y="60"  dominant-baseline="central">III</text>
+        <text x="60"  y="89"  dominant-baseline="central">VI</text>
+        <text x="31"  y="60"  dominant-baseline="central">IX</text>
+      </g>
+
+      <!-- Hour hand -->
+      <line id="sp-hour" x1="60" y1="60" x2="60" y2="34"
+            stroke="#56c3e4" stroke-width="4" stroke-linecap="round" filter="url(#spGlow)"/>
+      <!-- Minute hand -->
+      <line id="sp-min" x1="60" y1="62" x2="60" y2="21"
+            stroke="#90d8f0" stroke-width="2.5" stroke-linecap="round" filter="url(#spGlow)"/>
+      <!-- Second hand with counterweight tail -->
+      <line id="sp-sec" x1="60" y1="68" x2="60" y2="19"
+            stroke="#00d4f5" stroke-width="1.2" stroke-linecap="round" filter="url(#spGlow)"/>
+
+      <!-- Center hex bolt -->
+      <polygon points="60,54.2 65.8,57.4 65.8,63.8 60,67 54.2,63.8 54.2,57.4"
+               fill="#56c3e4" stroke="#061525" stroke-width="1.5"/>
+      <circle cx="60" cy="60.6" r="3" fill="#040c1a" stroke="#1a4a64" stroke-width="0.6"/>
+    </svg>
+  </div>
+</header>
+
+<!-- Search -->
+<div class="search-wrap">
+  <input id="search" class="search-input" type="text" placeholder="Search city or timezone..." autocomplete="off" />
+  <span class="search-icon">&#128269;</span>
+  <div id="dropdown" class="dropdown"></div>
+</div>
+
+<!-- Pinned Cities -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Pinned Cities</span>
+  </div>
+  <div id="cards" class="cards-grid">
+    <span class="empty-cards">Search for a city and pin it to see it here.</span>
+  </div>
+</div>
+
+<!-- Aliases -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Aliases</span>
+    <button class="btn btn-primary" id="openAddModal">+ Add Alias</button>
+  </div>
+  <div class="table-wrap">
+    <table class="alias-table">
+      <thead>
+        <tr>
+          <th>City</th>
+          <th>Timezone</th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="aliasBody">
+        <tr><td colspan="4" style="color:var(--text-dim);padding:16px">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Alias Modal -->
+<div class="modal-backdrop" id="addModal">
+  <div class="modal">
+    <h2>Add Alias</h2>
+    <div class="form-group">
+      <label>City Name</label>
+      <input id="aliasCity" type="text" placeholder="e.g. mytown" />
+    </div>
+    <div class="form-group">
+      <label>Timezone</label>
+      <input id="aliasTz" type="text" placeholder="e.g. America/Chicago" list="tzlist" />
+      <datalist id="tzlist"></datalist>
+      <div class="form-error" id="addError"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="closeAddModal">Cancel</button>
+      <button class="btn btn-primary" id="saveAlias">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let pinnedCities = JSON.parse(localStorage.getItem('pinnedCities') || '[]');
+// [{city, timezone}]
+
+function savePins() {
+  localStorage.setItem('pinnedCities', JSON.stringify(pinnedCities));
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function formatTime(tz) {
+  return new Date().toLocaleTimeString('en-US', {
+    timeZone: tz,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+}
+
+function formatDate(tz) {
+  return new Date().toLocaleDateString('en-US', {
+    timeZone: tz,
+    weekday: 'short', month: 'short', day: 'numeric',
+  });
+}
+
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.className = '', 2500);
+}
+
+// ── Pinned Cards ─────────────────────────────────────────────────────────────
+function renderCards() {
+  const grid = document.getElementById('cards');
+  if (pinnedCities.length === 0) {
+    grid.innerHTML = '<span class="empty-cards">Search for a city and pin it to see it here.</span>';
+    return;
+  }
+  grid.innerHTML = '';
+  for (const { city, timezone } of pinnedCities) {
+    const card = document.createElement('div');
+    card.className = 'city-card';
+    card.dataset.tz = timezone;
+    card.innerHTML = `
+      <button class="card-remove" title="Unpin">&#x2715;</button>
+      <div class="card-city">${city}</div>
+      <div class="card-time"></div>
+      <div class="card-date"></div>
+      <div class="card-tz">${timezone}</div>
+    `;
+    card.querySelector('.card-remove').addEventListener('click', () => unpin(city));
+    grid.appendChild(card);
+  }
+  tickCards();
+}
+
+function tickCards() {
+  for (const card of document.querySelectorAll('.city-card')) {
+    const tz = card.dataset.tz;
+    card.querySelector('.card-time').textContent = formatTime(tz);
+    card.querySelector('.card-date').textContent = formatDate(tz);
+  }
+}
+
+function pinCity(city, timezone) {
+  if (pinnedCities.some(p => p.city === city && p.timezone === timezone)) {
+    toast(`${city} is already pinned`, 'error');
+    return;
+  }
+  pinnedCities.push({ city, timezone });
+  savePins();
+  renderCards();
+  toast(`Pinned ${city}`);
+}
+
+function unpin(city) {
+  pinnedCities = pinnedCities.filter(p => p.city !== city);
+  savePins();
+  renderCards();
+}
+
+// Tick every second
+setInterval(tickCards, 1000);
+
+// ── Search ───────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById('search');
+const dropdown = document.getElementById('dropdown');
+let debounceTimer;
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  const q = searchInput.value.trim();
+  if (!q) { dropdown.classList.remove('open'); return; }
+  debounceTimer = setTimeout(() => doSearch(q), 250);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) dropdown.classList.remove('open');
+});
+
+async function doSearch(q) {
+  try {
+    const res = await fetch(`/api/search/${encodeURIComponent(q)}`);
+    const results = await res.json();
+    if (!results.length) {
+      dropdown.innerHTML = '<div class="dropdown-empty">No results found</div>';
+    } else {
+      dropdown.innerHTML = results.map(r => {
+        const t = formatTime(r.timezone);
+        return `
+          <div class="dropdown-item" data-city="${r.city}" data-tz="${r.timezone}">
+            <div>
+              <div class="city-name">${r.city}</div>
+              <div class="tz-name">${r.timezone}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="item-time">${t}</span>
+              <button class="pin-btn">Pin</button>
+            </div>
+          </div>`;
+      }).join('');
+
+      dropdown.querySelectorAll('.pin-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const item = btn.closest('.dropdown-item');
+          pinCity(item.dataset.city, item.dataset.tz);
+          dropdown.classList.remove('open');
+          searchInput.value = '';
+        });
+      });
+    }
+    dropdown.classList.add('open');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ── Alias Table ──────────────────────────────────────────────────────────────
+async function loadAliases() {
+  try {
+    const res = await fetch('/api/aliases');
+    const aliases = await res.json();
+    renderAliasTable(aliases);
+  } catch (e) {
+    document.getElementById('aliasBody').innerHTML =
+      '<tr><td colspan="4" style="color:var(--danger)">Failed to load aliases</td></tr>';
+  }
+}
+
+function renderAliasTable(aliases) {
+  const tbody = document.getElementById('aliasBody');
+  const sorted = Object.entries(aliases).sort((a, b) => a[0].localeCompare(b[0]));
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);padding:12px">No aliases yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(([city, tz]) => `
+    <tr>
+      <td><strong>${city}</strong></td>
+      <td class="tz-cell">${tz}</td>
+      <td class="pin-cell"><button title="Pin this city" data-city="${city}" data-tz="${tz}">&#128204;</button></td>
+      <td><button class="del-btn" data-city="${city}" title="Delete alias">&#x2715;</button></td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteAlias(btn.dataset.city));
+  });
+  tbody.querySelectorAll('.pin-cell button').forEach(btn => {
+    btn.addEventListener('click', () => pinCity(btn.dataset.city, btn.dataset.tz));
+  });
+}
+
+async function deleteAlias(city) {
+  if (!confirm(`Remove alias "${city}"?`)) return;
+  const res = await fetch(`/api/aliases/${encodeURIComponent(city)}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (res.ok) {
+    toast(`Removed alias "${city}"`);
+    loadAliases();
+  } else {
+    toast(data.error || 'Delete failed', 'error');
+  }
+}
+
+// ── Add Alias Modal ──────────────────────────────────────────────────────────
+document.getElementById('openAddModal').addEventListener('click', () => {
+  document.getElementById('aliasCity').value = '';
+  document.getElementById('aliasTz').value = '';
+  document.getElementById('addError').className = 'form-error';
+  document.getElementById('addModal').classList.add('open');
+  document.getElementById('aliasCity').focus();
+});
+document.getElementById('closeAddModal').addEventListener('click', () => {
+  document.getElementById('addModal').classList.remove('open');
+});
+document.getElementById('addModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('addModal'))
+    document.getElementById('addModal').classList.remove('open');
+});
+
+document.getElementById('saveAlias').addEventListener('click', async () => {
+  const city = document.getElementById('aliasCity').value.trim();
+  const timezone = document.getElementById('aliasTz').value.trim();
+  const errEl = document.getElementById('addError');
+
+  if (!city || !timezone) {
+    errEl.textContent = 'Both fields are required.';
+    errEl.className = 'form-error show';
+    return;
+  }
+
+  const res = await fetch('/api/aliases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ city, timezone }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('addModal').classList.remove('open');
+    toast(`Alias added: ${city} → ${timezone}`);
+    loadAliases();
+  } else {
+    errEl.textContent = data.error || 'Failed to add alias';
+    errEl.className = 'form-error show';
+  }
+});
+
+// ── Timezone Datalist ────────────────────────────────────────────────────────
+async function loadTimezones() {
+  try {
+    const res = await fetch('/api/timezones');
+    const tzs = await res.json();
+    const dl = document.getElementById('tzlist');
+    dl.innerHTML = tzs.map(tz => `<option value="${tz}">`).join('');
+  } catch (e) { /* non-critical */ }
+}
+
+// ── Today's Headlines ────────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadHeadlines() {
+  const list = document.getElementById('headlinesList');
+  try {
+    const res = await fetch('/api/headlines');
+    const headlines = await res.json();
+    if (!headlines.length) {
+      list.innerHTML = '<li><span class="headlines-loading">No headlines available</span></li>';
+      return;
+    }
+    list.innerHTML = headlines.map(h =>
+      `<li><a href="${escHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escHtml(h.title)}</a></li>`
+    ).join('');
+  } catch (e) {
+    list.innerHTML = '<li><span class="headlines-loading">Could not load headlines</span></li>';
+  }
+}
+loadHeadlines();
+setInterval(loadHeadlines, 10 * 60 * 1000);
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+renderCards();
+loadAliases();
+loadTimezones();
+
+// ── Steampunk Clock ──────────────────────────────────────────────────────────
+function updateSteampunkClock() {
+  const now = new Date();
+  const s = now.getSeconds();
+  const m = now.getMinutes() + s / 60;
+  const h = (now.getHours() % 12) + m / 60;
+  const deg = (v, max) => (v / max * 360).toFixed(2);
+  document.getElementById('sp-hour').setAttribute('transform', `rotate(${deg(h,12)},60,60)`);
+  document.getElementById('sp-min').setAttribute('transform',  `rotate(${deg(m,60)},60,60)`);
+  document.getElementById('sp-sec').setAttribute('transform',  `rotate(${deg(s,60)},60,60)`);
+}
+updateSteampunkClock();
+setInterval(updateSteampunkClock, 1000);
+</script>
+</body>
+</html>

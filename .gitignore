@@ -1,0 +1,33 @@
+# System / home dir files
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.hushlogin
+.lesshst
+.viminfo
+.motd_shown
+.sudo_as_admin_successful
+.ssh/
+.cache/
+.local/
+.npm/
+.nvm/
+.claude/
+.claude.json
+
+# Runtime / cache
+__pycache__/
+*.pyc
+*.pyo
+.citytime_cache.json
+.citytime_tzlist.cache
+.citytime_timezones.txt
+.citytime_aliases
+
+# Misc
+*.txt
+*.sh
+encode.txt
+input.txt
+output.txt
