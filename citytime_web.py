@@ -130,36 +130,49 @@ def api_timezones():
 
 _headlines_cache: dict = {"data": None, "expires": None}
 
+_RSS_FEEDS = [
+    ("Google News",   "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"),
+    ("Fox News",      "https://feeds.foxnews.com/foxnews/latest"),
+    ("Daily Mail",    "https://www.dailymail.co.uk/articles.rss"),
+]
+
+def _fetch_feed(url: str, max_items: int = 3) -> list:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        xml_data = resp.read()
+    root = ET.fromstring(xml_data)
+    channel = root.find("channel")
+    items = channel.findall("item")[:max_items]
+    results = []
+    for item in items:
+        title_el = item.find("title")
+        link_el = item.find("link")
+        if title_el is not None and link_el is not None:
+            title = title_el.text or ""
+            link = link_el.text or ""
+            if " - " in title:
+                title = title.rsplit(" - ", 1)[0]
+            results.append({"title": title, "url": link})
+    return results
+
 @app.route("/api/headlines")
 def api_headlines():
     now = datetime.now(timezone.utc)
     if _headlines_cache["data"] and _headlines_cache["expires"] and now < _headlines_cache["expires"]:
         return jsonify(_headlines_cache["data"])
-    try:
-        url = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            xml_data = resp.read()
-        root = ET.fromstring(xml_data)
-        channel = root.find("channel")
-        items = channel.findall("item")[:6]
-        headlines = []
-        for item in items:
-            title_el = item.find("title")
-            link_el = item.find("link")
-            if title_el is not None and link_el is not None:
-                title = title_el.text or ""
-                link = link_el.text or ""
-                if " - " in title:
-                    title = title.rsplit(" - ", 1)[0]
-                headlines.append({"title": title, "url": link})
+    headlines = []
+    for name, url in _RSS_FEEDS:
+        try:
+            headlines.extend(_fetch_feed(url, max_items=3))
+        except Exception:
+            pass
+    if headlines:
         _headlines_cache["data"] = headlines
         _headlines_cache["expires"] = now + timedelta(minutes=10)
         return jsonify(headlines)
-    except Exception:
-        if _headlines_cache["data"]:
-            return jsonify(_headlines_cache["data"])
-        return jsonify([])
+    if _headlines_cache["data"]:
+        return jsonify(_headlines_cache["data"])
+    return jsonify([])
 
 
 @app.route("/api/search/<path:query>")
