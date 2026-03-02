@@ -7,6 +7,7 @@ saves results to a timestamped file.
 
 import sys
 import os
+import math
 import time
 import threading
 from datetime import datetime
@@ -22,7 +23,8 @@ except ImportError:
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
-BAR_FMT = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+BAR_FMT    = "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+NEARBY_MI  = 200   # prefer servers within this distance
 
 CF_HEADERS = {
     "User-Agent": (
@@ -44,6 +46,7 @@ DOWNLOAD_SERVERS = [
         "name":    "Cloudflare",
         "short":   "Cloudflare",
         "dynamic": True,
+        "anycast": True,   # routes to nearest PoP — distance N/A
         "url_tmpl": "https://speed.cloudflare.com/__down?bytes={size}",
         "headers": CF_HEADERS,
     },
@@ -52,6 +55,9 @@ DOWNLOAD_SERVERS = [
         "name":     "Linode (Dallas, US)",
         "short":    "Linode-US",
         "dynamic":  False,
+        "anycast":  False,
+        "lat":      32.7767,
+        "lon":      -96.7970,
         "sm_url":   "https://speedtest.dallas.linode.com/100MB-dallas.bin",
         "sm_bytes": 100 * 1024 * 1024,
         "lg_url":   "https://speedtest.dallas.linode.com/1GB-dallas.bin",
@@ -63,6 +69,9 @@ DOWNLOAD_SERVERS = [
         "name":     "Tele2 (Stockholm, EU)",
         "short":    "Tele2-EU",
         "dynamic":  False,
+        "anycast":  False,
+        "lat":      59.3293,
+        "lon":      18.0686,
         "sm_url":   "http://speedtest.tele2.net/100MB.zip",
         "sm_bytes": 100 * 1024 * 1024,
         "lg_url":   "http://speedtest.tele2.net/1GB.zip",
@@ -74,6 +83,9 @@ DOWNLOAD_SERVERS = [
         "name":     "OVH (Beauharnois, CA)",
         "short":    "OVH",
         "dynamic":  False,
+        "anycast":  False,
+        "lat":      45.3155,
+        "lon":      -73.8625,
         "sm_url":   "https://proof.ovh.net/files/100Mb.dat",
         "sm_bytes": 100 * 1024 * 1024,
         "lg_url":   "https://proof.ovh.net/files/1Gb.dat",
@@ -126,6 +138,59 @@ def ask_int(prompt: str, default: int, lo: int, hi: int) -> int:
             print("  Invalid number.")
 
 
+# ── geo helpers ────────────────────────────────────────────────────────────────
+
+def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in miles between two lat/lon points."""
+    R = 3958.8
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a  = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def get_my_location() -> dict | None:
+    """Return geo-IP data for the outbound public IP, or None on failure."""
+    try:
+        resp = requests.get("http://ip-api.com/json/", timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "success":
+            return {
+                "ip":      data.get("query", ""),
+                "city":    data.get("city", ""),
+                "region":  data.get("regionName", ""),
+                "country": data.get("country", ""),
+                "lat":     float(data["lat"]),
+                "lon":     float(data["lon"]),
+            }
+    except Exception:
+        pass
+    return None
+
+
+def geo_recommend(location: dict) -> list[dict]:
+    """Return servers to use given the user's location.
+
+    Always includes Cloudflare (anycast).  For fixed-endpoint servers, includes
+    all within NEARBY_MI miles; if none qualify, falls back to the single nearest.
+    """
+    lat, lon = location["lat"], location["lon"]
+
+    anycast   = [s for s in DOWNLOAD_SERVERS if s.get("anycast")]
+    geoservers = sorted(
+        [s for s in DOWNLOAD_SERVERS if not s.get("anycast")],
+        key=lambda s: haversine_miles(lat, lon, s["lat"], s["lon"]),
+    )
+
+    nearby = [s for s in geoservers
+              if haversine_miles(lat, lon, s["lat"], s["lon"]) <= NEARBY_MI]
+
+    chosen = nearby if nearby else geoservers[:1]
+    return anycast + chosen
+
+
 # ── selection prompts ──────────────────────────────────────────────────────────
 
 def choose_sizes() -> list[tuple[str, int]]:
@@ -163,12 +228,29 @@ def choose_sizes() -> list[tuple[str, int]]:
         print("  Please try again.")
 
 
-def choose_servers() -> list[dict]:
+def choose_servers(location: dict | None = None) -> list[dict]:
+    lat = location["lat"] if location else None
+    lon = location["lon"] if location else None
+
+    GEO_ID = 0   # sentinel for "geo-recommend"
+    ALL_ID = len(DOWNLOAD_SERVERS) + 1
+
     print("\n  Download servers:")
+
+    if location:
+        recommended = geo_recommend(location)
+        rec_names   = ", ".join(s["short"] for s in recommended)
+        print(f"    {GEO_ID}. [Geo-recommend]  {rec_names}")
+
     for s in DOWNLOAD_SERVERS:
-        tag = "dynamic size" if s["dynamic"] else "100 MB / 1 GB fixed files"
-        print(f"    {s['id']}. {s['name']:<28} ({tag})")
-    print(f"    {len(DOWNLOAD_SERVERS) + 1}. All servers")
+        tag = "anycast — always local" if s.get("anycast") else "100 MB / 1 GB fixed"
+        if lat is not None and not s.get("anycast"):
+            dist = haversine_miles(lat, lon, s["lat"], s["lon"])
+            geo  = f"  {dist:,.0f} mi"
+        else:
+            geo  = ""
+        print(f"    {s['id']}. {s['name']:<28} ({tag}){geo}")
+    print(f"    {ALL_ID}. All servers")
 
     while True:
         raw    = input("\n  Select server(s) — enter number(s) separated by spaces: ").strip()
@@ -176,8 +258,10 @@ def choose_servers() -> list[dict]:
         if not tokens:
             print("  No selection made, try again.")
             continue
-        if str(len(DOWNLOAD_SERVERS) + 1) in tokens or raw.lower() == "all":
+        if str(ALL_ID) in tokens or raw.lower() == "all":
             return list(DOWNLOAD_SERVERS)
+        if location and str(GEO_ID) in tokens:
+            return geo_recommend(location)
         selected, valid = [], True
         for t in tokens:
             try:
@@ -402,6 +486,19 @@ def main():
     print("     INTERNET SPEED TEST  (multi-server · parallel streams)".center(68))
     print("=" * 68)
 
+    print("\n  Detecting location…", end="", flush=True)
+    location = get_my_location()
+    if location:
+        hemi_lat = "N" if location["lat"] >= 0 else "S"
+        hemi_lon = "E" if location["lon"] >= 0 else "W"
+        print(
+            f"\r  Location: {location['city']}, {location['region']}, {location['country']}"
+            f"  ({abs(location['lat']):.2f}°{hemi_lat}, {abs(location['lon']):.2f}°{hemi_lon})"
+            f"  [{location['ip']}]"
+        )
+    else:
+        print("\r  Location: unavailable (geo-recommend disabled)")
+
     do_dl = ask("\nTest download speed?")
     do_ul = ask("Test upload speed?")
 
@@ -418,7 +515,7 @@ def main():
 
     dl_servers: list[dict] = []
     if do_dl:
-        dl_servers = choose_servers()
+        dl_servers = choose_servers(location)
 
     print("\n" + "=" * 68)
     print(f"  Starting tests  ({streams} parallel stream{'s' if streams > 1 else ''})…")
