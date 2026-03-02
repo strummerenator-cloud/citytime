@@ -468,7 +468,8 @@ def run_upload(size_bytes: int, size_label: str, streams: int) -> dict:
 
 # ── results ────────────────────────────────────────────────────────────────────
 
-def build_report(dl_results: list, ul_results: list, ts: str, streams: int) -> str:
+def build_report(dl_results: list, ul_results: list, ts: str, streams: int,
+                 location: dict | None = None) -> str:
     W = 68
     lines = [
         "=" * W,
@@ -476,6 +477,14 @@ def build_report(dl_results: list, ul_results: list, ts: str, streams: int) -> s
         f"  {ts}  ·  {streams} parallel stream{'s' if streams > 1 else ''}".center(W),
         "=" * W,
     ]
+    if location:
+        hemi_lat = "N" if location["lat"] >= 0 else "S"
+        hemi_lon = "E" if location["lon"] >= 0 else "W"
+        lines.append(
+            f"\n  Location: {location['city']}, {location['region']}, {location['country']}"
+            f"  ({abs(location['lat']):.2f}°{hemi_lat}, {abs(location['lon']):.2f}°{hemi_lon})"
+            f"  [{location['ip']}]"
+        )
 
     def section(title: str, results: list):
         lines.append(f"\n  {title}")
@@ -569,7 +578,7 @@ def main():
                 print(f"  [ERROR] {exc}")
 
     ts     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    report = build_report(dl_results, ul_results, ts, streams)
+    report = build_report(dl_results, ul_results, ts, streams, location)
 
     print("\n")
     print(report)
